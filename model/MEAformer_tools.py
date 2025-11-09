@@ -23,7 +23,8 @@ import pdb
 from .submodels import AuxiliaryNet, BackboneNet, MLP
 
 
-class MformerFusion_Gated_w(nn.Module):
+# 所有模态w/ 门控
+class MformerFusion(nn.Module):
     def __init__(self, args, modal_num, with_weight=1):
         super().__init__()
         self.args = args
