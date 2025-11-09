@@ -35,3 +35,5 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python  main.py \
             --il            \
 	        --il_start      500 \
             --enable_sota \
+            --auxiliary_hidden_size 300 \
+            --embedding_length 300 \
