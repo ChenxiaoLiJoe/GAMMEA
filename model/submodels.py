@@ -15,9 +15,8 @@ class AuxiliaryNet(torch.nn.Module):
     --------
     """
 
-    def __init__(self, batch_size, auxiliary_hidden_size, embedding_length, biDirectional=False, num_layers=1, tau=1):
+    def __init__(self, auxiliary_hidden_size, embedding_length, biDirectional=False, num_layers=1, tau=1):
         super(AuxiliaryNet, self).__init__()
-        self.batch_size = batch_size
         self.hidden_size = auxiliary_hidden_size
         self.embedding_length = embedding_length
         self.biDirectional = biDirectional
@@ -32,20 +31,31 @@ class AuxiliaryNet(torch.nn.Module):
         self.sigmoid = torch.nn.Sigmoid()
         self.tau = tau
 
-    def forward(self, input_sequence, is_train=True, batch_size=None):
+    def forward(self, input_sequence, is_train=True):
 
         # input : Dimensions (batch_size x seq_len x embedding_length)
 
+        # LSTM编码
         out_lstm, (final_hidden_state, final_cell_state) = self.aux_lstm(
             input_sequence)  # ouput dim: ( batch_size x seq_len x hidden_size )
-        out_linear = self.aux_linear(out_lstm)  # p_t dim: ( batch_size x seq_len x 1)
+
+        # 如果是双向LSTM，使用最后时刻的拼接隐藏状态；否则使用最后时刻的隐藏状态
+        if self.biDirectional:
+            # 双向LSTM: 连接前向和后向的最后隐藏状态
+            final_hidden = torch.cat((final_hidden_state[-2,:,:], final_hidden_state[-1,:,:]), dim=1)
+        else:
+            # 单向LSTM: 使用最后层的最后隐藏状态
+            final_hidden = final_hidden_state[-1,:,:]
+
+        # 得到每个时间步的概率𝑝𝑡，范围在[0,1]
+        out_linear = self.aux_linear(final_hidden)  # p_t dim: ( batch_size x seq_len x 1)
         p_t = self.sigmoid(out_linear)
 
         if is_train:
-            p_t = p_t.repeat(1, 1, 2)
-            p_t[:, :, 0] = 1 - p_t[:, :, 0]
+            p_t = p_t.repeat(1, 2) # 扩展为两个类别
+            p_t[:, 0] = 1 - p_t[:, 0] # 第一个类别是“不选”
             g_hat = F.gumbel_softmax(p_t, self.tau, hard=False)
-            g_t = g_hat[:, :, 1]
+            g_t = g_hat[:, 1:2] # 取第二个类别”选中 “
 
         else:
             # size : same as p_t [ batch_size x seq_len x 1]

@@ -33,3 +33,5 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python  main.py \
             --use_intermediate 1   \
             --enable_sota \
             --replay 0 \
+            --auxiliary_hidden_size 300 \
+            --embedding_length 300 \

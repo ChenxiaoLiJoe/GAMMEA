@@ -109,6 +109,10 @@ class cfg():
         parser.add_argument("--replay", type=int, default=0, help="whether to use replay strategy")
         parser.add_argument("--neg_cross_kg", type=int, default=0, help="whether to force the negative samples in the opposite KG")
 
+        # --------- GAMMEA -----------
+        parser.add_argument("--auxiliary_hidden_size", type=int, default=100, help="the hidden size of AuxiliaryNet")
+        parser.add_argument("--embedding_length", type=int, default=100, help="the hidden size of AuxiliaryNet")
+
         # --------- MSNEA -----------
         parser.add_argument("--dim", type=int, default=100, help="the hidden size of MSNEA")
         parser.add_argument("--neg_triple_num", type=int, default=1, help="neg triple num")

@@ -29,11 +29,7 @@ class MformerFusion_Gated_w(nn.Module):
         self.args = args
         self.modal_num = modal_num
         self.fusion_layer = nn.ModuleList([BertLayer(args) for _ in range(args.num_hidden_layers)])
-        # ?
-        self.modality_gates = nn.ModuleList([
-            AuxiliaryNet(self.batch_size, self.aux_hidden_size, self.embedding_length, self.biDirectional_aux)
-            for _ in range(modal_num)
-        ])
+        self.modality_gates = nn.ModuleList([AuxiliaryNet(args) for _ in range(modal_num)])
 
         # self.type_embedding = nn.Embedding(args.inner_view_num, args.hidden_size)
         self.type_id = torch.tensor([0, 1, 2, 3, 4, 5]).cuda()
@@ -45,8 +41,7 @@ class MformerFusion_Gated_w(nn.Module):
 
         # 计算门控 g_m ∈ {0,1} 或 [0,1]（按需选择 hard/soft）？维度？
         gates = [
-            (self.modality_gates[i](embs[i].mean(dim=1, keepdim=True)) > 0.5).float()  # hard gate: 二值
-            # self.modality_gates[i](embs[i].mean(dim=1, keepdim=True))               # soft gate: 连续
+            (self.modality_gates[i](embs[i]) > 0.5).float()
             for i in range(modal_num)
         ]
 
@@ -68,7 +63,7 @@ class MformerFusion_Gated_w(nn.Module):
         weight_norm = F.softmax(attention_pro_comb, dim=-1)
 
         # 将 [B,1,1] 的 gate 挤压到 [B,1] 以匹配注意力权重，再扩回?
-        gate_vec = torch.cat([g.squeeze(-1).squeeze(-1) for g in gates], dim=1)  # [B, modal_num]
+        gate_vec = torch.stack([g.squeeze(-1).squeeze(-1) for g in gates], dim=1)  # [B, modal_num]
 
         # 先与门控相乘，使被关掉的模态不参与加权?
         masked_weight = weight_norm * gate_vec  # [B, modal_num]
