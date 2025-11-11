@@ -30,7 +30,7 @@ class MformerFusion(nn.Module):
         self.args = args
         self.modal_num = modal_num
         self.fusion_layer = nn.ModuleList([BertLayer(args) for _ in range(args.num_hidden_layers)])
-        self.modality_gates = nn.ModuleList([AuxiliaryNet(args) for _ in range(modal_num)])
+        self.modality_gates = nn.ModuleList([AuxiliaryNet(args.auxiliary_hidden_size, args.embedding_length) for _ in range(modal_num)])
 
         # self.type_embedding = nn.Embedding(args.inner_view_num, args.hidden_size)
         self.type_id = torch.tensor([0, 1, 2, 3, 4, 5]).cuda()
