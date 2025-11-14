@@ -64,7 +64,20 @@ class MformerFusion_w_jz(nn.Module):
         weight_norm = F.softmax(attention_pro_comb, dim=-1)
 
         # 将 [B,1,1] 的 gate 挤压到 [B,1] 以匹配注意力权重，再扩回?
-        gate_vec = torch.stack([g.squeeze(-1).squeeze(-1) for g in gates], dim=1)  # [B, modal_num]
+        # gate_vec = torch.stack([g.squeeze(-1).squeeze(-1) for g in gates], dim=1)  # [B, modal_num]
+
+        processed_gates = []
+        for g in gates:
+            # 如果是标量，扩展成 [B]，假设 batch_size=1 时也能兼容
+            if g.dim() == 0:
+                g = g.unsqueeze(0)
+            # 如果是二维 [B,1]，压缩成 [B]
+            if g.dim() == 2 and g.size(1) == 1:
+                g = g.squeeze(1)
+            processed_gates.append(g)
+
+        # 堆叠成 [B, modal_num]
+        gate_vec = torch.stack(processed_gates, dim=1)
 
         # 先与门控相乘，使被关掉的模态不参与加权?
         masked_weight = weight_norm * gate_vec  # [B, modal_num]
@@ -83,7 +96,7 @@ class MformerFusion_w_jz(nn.Module):
 
 
 # 门控0和1的模态
-class MformerFusion(nn.Module):
+class MformerFusion_w(nn.Module):
     def __init__(self, args, modal_num, with_weight=1):
         super().__init__()
         self.args = args
@@ -123,7 +136,20 @@ class MformerFusion(nn.Module):
         weight_norm = F.softmax(attention_pro_comb, dim=-1)
 
         # 将 [B,1,1] 的 gate 挤压到 [B,1] 以匹配注意力权重，再扩回?
-        gate_vec = torch.stack([g.squeeze(-1).squeeze(-1) for g in gates], dim=1)  # [B, modal_num]
+        # gate_vec = torch.stack([g.squeeze(-1).squeeze(-1) for g in gates], dim=1)  # [B, modal_num]
+
+        processed_gates = []
+        for g in gates:
+            # 如果是标量，扩展成 [B]，假设 batch_size=1 时也能兼容
+            if g.dim() == 0:
+                g = g.unsqueeze(0)
+            # 如果是二维 [B,1]，压缩成 [B]
+            if g.dim() == 2 and g.size(1) == 1:
+                g = g.squeeze(1)
+            processed_gates.append(g)
+
+        # 堆叠成 [B, modal_num]
+        gate_vec = torch.stack(processed_gates, dim=1)
 
         # 先与门控相乘，使被关掉的模态不参与加权?
         masked_weight = weight_norm * gate_vec  # [B, modal_num]
@@ -166,7 +192,20 @@ class MformerFusion_Gated_wo(nn.Module):
         ]
 
         # 将 [B,1,1] 的 gate 挤压到 [B,1] 以匹配注意力权重，再扩回?
-        gate_vec = torch.stack([g.squeeze(-1).squeeze(-1) for g in gates], dim=1)  # [B, modal_num]
+        # gate_vec = torch.stack([g.squeeze(-1).squeeze(-1) for g in gates], dim=1)  # [B, modal_num]
+
+        processed_gates = []
+        for g in gates:
+            # 如果是标量，扩展成 [B]，假设 batch_size=1 时也能兼容
+            if g.dim() == 0:
+                g = g.unsqueeze(0)
+            # 如果是二维 [B,1]，压缩成 [B]
+            if g.dim() == 2 and g.size(1) == 1:
+                g = g.squeeze(1)
+            processed_gates.append(g)
+
+        # 堆叠成 [B, modal_num]
+        gate_vec = torch.stack(processed_gates, dim=1)
 
         # 如果门控全为0，强制保留modality_gates得到的最大概率的模态
         if sum([gates[i].sum() for i in range(modal_num)]) == 0:
