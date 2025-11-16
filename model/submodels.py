@@ -39,13 +39,29 @@ class AuxiliaryNet(torch.nn.Module):
         out_lstm, (final_hidden_state, final_cell_state) = self.aux_lstm(
             input_sequence)  # ouput dim: ( batch_size x seq_len x hidden_size )
 
+        # # 如果是双向LSTM，使用最后时刻的拼接隐藏状态；否则使用最后时刻的隐藏状态
+        # if self.biDirectional:
+        #     # 双向LSTM: 连接前向和后向的最后隐藏状态
+        #     final_hidden = torch.cat((final_hidden_state[-2,:,:], final_hidden_state[-1,:,:]), dim=1)
+        # else:
+        #     # 单向LSTM: 使用最后层的最后隐藏状态
+        #     final_hidden = final_hidden_state[-1,:]
+
         # 如果是双向LSTM，使用最后时刻的拼接隐藏状态；否则使用最后时刻的隐藏状态
         if self.biDirectional:
             # 双向LSTM: 连接前向和后向的最后隐藏状态
-            final_hidden = torch.cat((final_hidden_state[-2,:], final_hidden_state[-1,:,:]), dim=1)
+            # Handle both 2D and 3D cases
+            if final_hidden_state.dim() == 3:
+                final_hidden = torch.cat((final_hidden_state[-2, :, :], final_hidden_state[-1, :, :]), dim=1)
+            else:
+                final_hidden = torch.cat((final_hidden_state[-2, :], final_hidden_state[-1, :]), dim=0)
         else:
             # 单向LSTM: 使用最后层的最后隐藏状态
-            final_hidden = final_hidden_state[-1,:]
+            # Handle both 2D and 3D cases
+            if final_hidden_state.dim() == 3:
+                final_hidden = final_hidden_state[-1, :, :]
+            else:
+                final_hidden = final_hidden_state[-1, :]
 
         # 得到每个时间步的概率𝑝𝑡，范围在[0,1]
         out_linear = self.aux_linear(final_hidden)  # p_t dim: ( batch_size x seq_len x 1)
