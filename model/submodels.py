@@ -15,7 +15,7 @@ class AuxiliaryNet(torch.nn.Module):
     --------
     """
 
-    def __init__(self, auxiliary_hidden_size, embedding_length, biDirectional=False, num_layers=1, tau=1):
+    def __init__(self, auxiliary_hidden_size, embedding_length, biDirectional=False, num_layers=1, tau=35):
         super(AuxiliaryNet, self).__init__()
         self.hidden_size = auxiliary_hidden_size
         self.embedding_length = embedding_length
