@@ -23,8 +23,76 @@ import pdb
 from .submodels import AuxiliaryNet, BackboneNet, MLP
 
 
-# 门控0和1的模态 + 校准
-class MformerFusion_w_jz(nn.Module):
+# 门控0和1的图像模态
+class MformerFusion_Gated_w_Img(nn.Module):
+    def __init__(self, args, modal_num, with_weight=1):
+        super().__init__()
+        self.args = args
+        self.modal_num = modal_num
+        self.fusion_layer = nn.ModuleList([BertLayer(args) for _ in range(args.num_hidden_layers)])
+        self.image_gate = AuxiliaryNet(args.auxiliary_hidden_size, args.embedding_length)
+
+        # self.type_embedding = nn.Embedding(args.inner_view_num, args.hidden_size)
+        self.type_id = torch.tensor([0, 1, 2, 3, 4, 5]).cuda()
+
+    def forward(self, embs):
+        # 清洗有效模态
+        embs = [embs[idx] for idx in range(len(embs)) if embs[idx] is not None]
+        modal_num = len(embs)
+        bs = embs[0].size(0)
+
+        # 计算门控，保证维度一致 [B]
+        gates = []
+        for i in range(modal_num):
+            if i == 0:
+                g = self.image_gate(embs[0])   # 可能输出 [B,1] 或 [1]
+                if g.dim() == 2 and g.size(1) == 1:
+                    g = g.squeeze(1)           # [B]
+                if g.dim() == 0:               # 标量 → 扩展到 batch
+                    g = g.expand(bs)
+                elif g.size(0) == 1:           # 单元素 → 扩展到 batch
+                    g = g.expand(bs)
+            else:
+                g = torch.ones(bs, device=embs[i].device)
+            gates.append(g)
+
+        # 堆叠模态嵌入 → [B, modal_num, seq_len, hidden_size]
+        hidden_states = torch.stack(embs, dim=1)
+
+        # Transformer 融合
+        for i, layer_module in enumerate(self.fusion_layer):
+            layer_outputs = layer_module(hidden_states, output_attentions=True)
+            hidden_states = layer_outputs[0]
+        # torch.Size([30355, 5, 4, 4])
+        # attention_pro = layer_outputs[1]
+        # torch.Size([30355, 4, 4])
+
+        # 提取注意力权重 → [B, modal_num]
+        attention_pro = torch.sum(layer_outputs[1], dim=-3)
+        attention_pro_comb = torch.sum(attention_pro, dim=-2) / math.sqrt(modal_num * self.args.num_attention_heads)
+        weight_norm = F.softmax(attention_pro_comb, dim=-1)
+
+        # 堆叠成 [B, modal_num]
+        gate_vec = torch.stack(gates, dim=1)
+
+        # 先与门控相乘，使被关掉的模态不参与加权?
+        masked_weight = weight_norm * gate_vec  # [B, modal_num]
+
+        # 可选：对存活模态重归一化，避免总权重缩小（推荐）?
+        denom = masked_weight.sum(dim=1, keepdim=True).clamp(min=1e-8)
+        masked_weight = masked_weight / denom  # 只在有效模态上归一化
+
+        # 使用注意力权重对模态嵌入加权
+        embs = [masked_weight[:, idx].unsqueeze(1) * F.normalize(embs[idx]) for idx in range(modal_num)]
+
+        # 拼接成联合表示 → [B, modal_num * hidden_size]
+        joint_emb = torch.cat(embs, dim=1)
+
+        return joint_emb, hidden_states, weight_norm
+
+
+# 软门控0和1的模态
+class MformerFusion_Soft_Gated_w(nn.Module):
     def __init__(self, args, modal_num, with_weight=1):
         super().__init__()
         self.args = args
@@ -42,7 +110,7 @@ class MformerFusion_w_jz(nn.Module):
 
         # 计算门控 g_m ∈ {0,1} 或 [0,1]（按需选择 hard/soft）？维度？
         gates = [
-            (self.modality_gates[i](embs[i]) > 0.5).float()
+            self.modality_gates[i](embs[i])
             for i in range(modal_num)
         ]
 
@@ -96,7 +164,7 @@ class MformerFusion_w_jz(nn.Module):
 
 
 # 门控0和1的模态
-class MformerFusion_w(nn.Module):
+class MformerFusion_Gated_w(nn.Module):
     def __init__(self, args, modal_num, with_weight=1):
         super().__init__()
         self.args = args

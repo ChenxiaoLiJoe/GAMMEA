@@ -64,6 +64,8 @@ class AuxiliaryNet(torch.nn.Module):
 
         return g_t
 
+        # return p_t
+
 
 class BackboneNet(torch.nn.Module):
     """
