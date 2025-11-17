@@ -65,22 +65,24 @@ class AuxiliaryNet(torch.nn.Module):
 
         # 得到每个时间步的概率𝑝𝑡，范围在[0,1]
         out_linear = self.aux_linear(final_hidden)  # p_t dim: ( batch_size x seq_len x 1)
-        p_t = self.sigmoid(out_linear)
+        # p_t = self.sigmoid(out_linear)
+        #
+        # if is_train:
+        #     p_t = p_t.repeat(1, 2) # 扩展为两个类别
+        #     p_t[:, 0] = 1 - p_t[:, 0] # 第一个类别是“不选”
+        #     g_hat = F.gumbel_softmax(p_t, self.tau, hard=False)
+        #     g_t = g_hat[:, 1:2] # 取第二个类别”选中 “
+        #
+        # else:
+        #     # size : same as p_t [ batch_size x seq_len x 1]
+        #     m = torch.distributions.bernoulli.Bernoulli(p_t)
+        #     g_t = m.sample()
+        #
+        # return g_t
 
-        if is_train:
-            p_t = p_t.repeat(1, 2) # 扩展为两个类别
-            p_t[:, 0] = 1 - p_t[:, 0] # 第一个类别是“不选”
-            g_hat = F.gumbel_softmax(p_t, self.tau, hard=False)
-            g_t = g_hat[:, 1:2] # 取第二个类别”选中 “
+        p_t = out_linear
 
-        else:
-            # size : same as p_t [ batch_size x seq_len x 1]
-            m = torch.distributions.bernoulli.Bernoulli(p_t)
-            g_t = m.sample()
-
-        return g_t
-
-        # return p_t
+        return p_t
 
 
 class BackboneNet(torch.nn.Module):

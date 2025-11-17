@@ -23,6 +23,62 @@ import pdb
 from .submodels import AuxiliaryNet, BackboneNet, MLP
 
 
+# 图像门控权重覆盖注意力权重，其余模态使用注意力权重
+class MformerFusion_Gated_w_Img_Cover(nn.Module):
+    def __init__(self, args, modal_num, with_weight=1):
+        super().__init__()
+        self.args = args
+        self.modal_num = modal_num
+        self.fusion_layer = nn.ModuleList([BertLayer(args) for _ in range(args.num_hidden_layers)])
+        self.image_gate = AuxiliaryNet(args.auxiliary_hidden_size, args.embedding_length)
+        self.type_id = torch.tensor([0, 1, 2, 3, 4, 5]).cuda()
+
+    def forward(self, embs):
+        # 清洗有效模态
+        embs = [embs[idx] for idx in range(len(embs)) if embs[idx] is not None]
+        modal_num = len(embs)
+        bs = embs[0].size(0)
+
+        # 计算门控 [B]
+        g_img = self.image_gate(embs[0])   # [B,1] 或 [1]
+        if g_img.dim() == 2 and g_img.size(1) == 1:
+            g_img = g_img.squeeze(1)       # [B]
+        if g_img.dim() == 0:
+            g_img = g_img.expand(bs)
+        elif g_img.size(0) == 1:
+            g_img = g_img.expand(bs)
+
+        # 堆叠模态嵌入 → [B, modal_num, seq_len, hidden_size]
+        hidden_states = torch.stack(embs, dim=1)
+
+        # Transformer 融合
+        for i, layer_module in enumerate(self.fusion_layer):
+            layer_outputs = layer_module(hidden_states, output_attentions=True)
+            hidden_states = layer_outputs[0]
+
+        # 提取注意力权重 → [B, modal_num]
+        attention_pro = torch.sum(layer_outputs[1], dim=-3)
+        attention_pro_comb = torch.sum(attention_pro, dim=-2) / math.sqrt(modal_num * self.args.num_attention_heads)
+        # weight_norm = F.softmax(attention_pro_comb, dim=-1)   # [B, modal_num]
+        weight_norm = attention_pro_comb   # [B, modal_num]
+
+        # 覆盖第0模态权重，其余模态保持注意力权重
+        masked_weight = weight_norm.clone()
+        masked_weight[:, 0] = g_img   # 用 image_gate 替换第0模态权重
+
+        # 可选：归一化，保证总和为1
+        denom = masked_weight.sum(dim=1, keepdim=True).clamp(min=1e-8)
+        masked_weight = masked_weight / denom
+
+        # 使用混合权重对模态嵌入加权
+        embs = [masked_weight[:, idx].unsqueeze(1) * F.normalize(embs[idx]) for idx in range(modal_num)]
+
+        # 拼接成联合表示 → [B, modal_num * hidden_size]
+        joint_emb = torch.cat(embs, dim=1)
+
+        return joint_emb, hidden_states, masked_weight
+
+
 # 门控0和1的图像模态
 class MformerFusion_Gated_w_Img(nn.Module):
     def __init__(self, args, modal_num, with_weight=1):
