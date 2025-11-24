@@ -23,8 +23,9 @@ import pdb
 from .submodels import AuxiliaryNet, BackboneNet, MLP
 
 
-# 门控0和1的图像模态，基于jz
-class MformerFusion_Gated_jzbert(nn.Module):
+# 门控0和1的图像模态，基于jz Y
+class MformerFusion(nn.Module):
+# class MformerFusion_Gated_jzbert(nn.Module):
     def __init__(self, args, modal_num, with_weight=1):
         super().__init__()
         self.args = args
