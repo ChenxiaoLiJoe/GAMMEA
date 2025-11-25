@@ -80,10 +80,6 @@ class AuxiliaryNet(torch.nn.Module):
 
         return g_t
 
-        # p_t = out_linear
-        #
-        # return p_t
-
 
 class BackboneNet(torch.nn.Module):
     """
