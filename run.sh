@@ -37,7 +37,7 @@ bash run_meaformer_il.sh 1 DBP15K zh_en 0.3 1
 bash run_meaformer_il.sh 1 DBP15K ja_en 0.3 1 
 bash run_meaformer_il.sh 1 DBP15K fr_en 0.3 1
 
-# nohup bash run_meaformer.sh 7 FBYG15K norm 0.2 0 > ./output/bdd_wo_FBYG0.2_img_tau35_jz.log &
+# nohup bash run_meaformer.sh 7 FBYG15K norm 0.2 0 > ./output/bdd_wo_FBYG0.2_jz.log &
 
 # -------------------------------------------------------
 
