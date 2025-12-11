@@ -23,26 +23,29 @@ import pdb
 from .submodels import AuxiliaryNet
 
 
-# 门控0和1的图像模态
+# test
 class MformerFusion(nn.Module):
     def __init__(self, args, modal_num, with_weight=1):
         super().__init__()
         self.args = args
         self.modal_num = modal_num
         self.fusion_layer = nn.ModuleList([BertLayer(args) for _ in range(args.num_hidden_layers)])
+        self.image_gate = AuxiliaryNet(args.auxiliary_hidden_size, args.embedding_length)
         self.ConfidNet = nn.Sequential(
             nn.Linear(300, 300 * 2),
             nn.Linear(300 * 2, 300),
             nn.Linear(300, 1),
             nn.Sigmoid()
         )
+        self.type_id = torch.tensor([0, 1, 2, 3, 4, 5]).cuda()
 
     def forward(self, embs):
-        device = embs[0].device
-        embs = [embs[idx] for idx in range(len(embs)) if embs[idx] is not None]
+        # mask = torch.tensor([1 if embs[idx] is not None else 0 for idx in range(len(embs))], device=embs[0].device)
+        embs = [embs[idx] if embs[idx] is not None else torch.zeros_like(embs[0]) for idx in range(len(embs))]
+
         modal_num = len(embs)
 
-        hidden_states = torch.stack(embs, dim=1).to(device)
+        hidden_states = torch.stack(embs, dim=1)
         bs = hidden_states.shape[0]
 
         tcps = []
@@ -53,10 +56,12 @@ class MformerFusion(nn.Module):
         holos = []
         for i, tcp in enumerate(tcps):
             current_tcp = tcps[0]  # 第一个元素
-            ap_tcp = torch.prod(torch.stack(tcps)).to(device)  # 所有元素的乘积
+            # ap_tcp = torch.prod(torch.tensor(tcps))  # 所有元素的乘积
+            ap_tcp = torch.prod(torch.stack(tcps)).cuda()  # 所有元素的乘积
             holo = torch.log(current_tcp) / (torch.log(ap_tcp) + 1e-8)
             holos.append(holo.detach())
 
+        # 将 tcps 和 holos 中的元素逐位相加，并分别使用 detach()
         cb = []
         for tcp, holo in zip(tcps, holos):
             cb.append((tcp.detach() + holo.detach()).tolist())
@@ -64,11 +69,14 @@ class MformerFusion(nn.Module):
         for i, layer_module in enumerate(self.fusion_layer):
             layer_outputs = layer_module(hidden_states, output_attentions=True)
             hidden_states = layer_outputs[0]
+
         attention_pro = torch.sum(layer_outputs[1], dim=-3)
         attention_pro_comb = torch.sum(attention_pro, dim=-2) / math.sqrt(modal_num * self.args.num_attention_heads)
+        # mask = mask.unsqueeze(0).expand_as(attention_pro_comb)
+        # attention_pro_comb = attention_pro_comb.masked_fill(mask == 0, float('-inf'))
+        # weight_norm = F.softmax(attention_pro_comb, dim=-1)
 
         dus = torch.mean(torch.abs(attention_pro_comb - 1 / attention_pro_comb.shape[1]), dim=1, keepdim=True).detach()
-
         current_modal_du_power = torch.pow(dus, modal_num).detach()
         other_modal_product = torch.prod(dus, dim=1).detach()
         condition = current_modal_du_power > other_modal_product
@@ -90,7 +98,7 @@ class MformerFusion(nn.Module):
 
         ccbs = []
         for i in range(modal_num):
-            cb_tensor = torch.tensor(cb[i]).to(device)
+            cb_tensor = torch.tensor(cb[i]).cuda()
             rc_tensor = rcs[:, i]
             ccb = cb_tensor * rc_tensor
             ccbs.append(ccb)
@@ -98,6 +106,11 @@ class MformerFusion(nn.Module):
         weight_norm = torch.stack(ccbs, 1)
         softmax = nn.Softmax(1)
         weight_norm = softmax(weight_norm)
+
+        gate_out = self.image_gate(embs[0])
+        weight_norm_modified = weight_norm.clone()
+        weight_norm_modified[:, 0] = weight_norm[:, 0] * gate_out.squeeze(-1)
+        weight_norm = F.softmax(weight_norm_modified, dim=-1)
 
         embs = [weight_norm[:, idx].unsqueeze(1) * F.normalize(embs[idx]) for idx in range(modal_num)]
         joint_emb = torch.cat(embs, dim=1)
